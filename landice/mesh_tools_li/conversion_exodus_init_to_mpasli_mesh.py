@@ -30,7 +30,7 @@ parser.add_option("-e", "--exo", dest="exo_file", help="the exo input file")
 parser.add_option("-a", "--ascii", dest="id_file", help="the ascii global id input file")
 parser.add_option("-o", "--out", dest="nc_file", help="the mpas file to write to")
 parser.add_option("-v", "--variable", dest="var_name", help="the mpas variable(s) you want to convert from an exodus file. May be a single variable or multiple variables comma-separated (no spaces)")
-parser.add_option("--dynamics", dest="dynamics", action="store_true", help="Use to convert ice dynamics fields: beta, stiffnessFactor, uReconstructX/Y.  If stiffnessFactor was not included in the optimzation, it will be skipped.")
+parser.add_option("--dynamics", dest="dynamics", action="store_true", help="Use to convert ice dynamics fields: beta, muFriction, stiffnessFactor, uReconstructX/Y.  If stiffnessFactor was not included in the optimzation, it will be skipped.")
 parser.add_option("--thermal", dest="thermal", action="store_true", help="Use to convert thermal fields: temperature, surfaceTemperature, basalTemperature.  Only use when the Albany optimization included the thermal solution.")
 parser.add_option("--geometry", dest="geometry", action="store_true", help="Use to convert geometry fields: thickness and corresponding adjustment to bedTopography.  Only use when the Albany optimization included adjustment to the ice thickness.")
 for option in parser.option_list:
@@ -46,11 +46,15 @@ if SEACAS_path == None:
    #sys.path.append('/home/tzhang/Apps/seacas/lib')
    #sys.path.append('/Users/trevorhillebrand/Documents/mpas/seacas/lib/')
    #sys.path.append('/Users/mhoffman/software/seacas/install/lib')
-   sys.path.append('/usr/projects/climate/SHARED_CLIMATE/software/badger/trilinos/2018-12-19/gcc-6.4.0/openmpi-2.1.2/lib')  # path on LANL Badger/Grizzly
+   sys.path.append('/global/project/projectdirs/piscees/nightlyCoriCDash/build/TrilinosInstall/lib')  # path on Cori
+   # Note: There is currently not an operational installation on Badger or Grizzly
 else:
    sys.path.append(SEACAS_path+'/lib')
 
-from exodus import exodus
+try:
+    from exodus import exodus
+except ModuleNotFoundError:
+    from exodus3 import exodus
 
 # Map and copy Exodus data to MPAS data
 
@@ -80,8 +84,6 @@ if not options.exo_file:
    sys.exit("ERROR: an Albany optimization exodus file was not specified with --exo or -e.")
 exo = exodus(options.exo_file)
 
-stride = np.array(exo.get_global_variable_values('stride'))
-
 # Get Exodus coordinate arrays
 xyz_exo = exo.get_coords()
 x_exo = np.array(xyz_exo[0]) * 1000.0
@@ -110,8 +112,9 @@ if not options.id_file:
    sys.exit("ERROR: Cell ID file was not specified with --ascii or -a")
 print("Reading global id file {}".format(options.id_file))
 cellID = np.loadtxt(options.id_file,dtype='i')
+# The first number in the file is the total number, which is the same as the stride
 cellID_array = cellID[1::]
-# The first number in the file is the total number. skip it
+stride = cellID[0]  # Get stride from cell id file instead of from exo file
 
 # Parse variable names from options
 var_names = []
@@ -147,11 +150,11 @@ for var_name in var_names:
     if var_name == "beta":
         smooth_iter_num = 0
         extrapolation = "min"
-    if var_name == "muFriction":
+    elif var_name == "muFriction":
         smooth_iter_num = 0
         extrapolation = "min"
     elif var_name == "stiffnessFactor":
-        smooth_iter_num = 3
+        smooth_iter_num = 0
         extrapolation = "idw"
     else:
         smooth_iter_num = 0
@@ -214,6 +217,8 @@ for var_name in var_names:
                 dataset.variables[var_name][0,cellID_array-1] = np.exp(data_exo_layer) * 1000.0
             elif var_name == "muFriction":
                 dataset.variables[var_name][0,cellID_array-1] = np.exp(data_exo_layer)
+            elif var_name == "stiffnessFactor":
+                dataset.variables[var_name][0,cellID_array-1] = np.exp(data_exo_layer)
             elif var_name == "uReconstructX" or var_name == "uReconstructY":
                 dataset.variables[var_name][0,cellID_array-1, nVert] = data_exo_layer / (60. * 60. * 24 * 365)
             elif var_name == "thickness":
@@ -273,12 +278,7 @@ for var_name in var_names:
 
             keepCellMask = np.zeros((nCells,), dtype=np.int8)
 
-            # Define region of good data to extrapolate from.  Different methods for different variables
-            if var_name in ["beta", "muFriction"]:
-                keepCellMask[varValue > 0.0] = 1
-            # find the mask for grounded ice region
-            else:
-                keepCellMask[thickness > 0.0] = 1
+            keepCellMask[varValue > 0.0] = 1 # Define region to keep as anywhere the optimization returned a value
 
             keepCellMaskNew = np.copy(keepCellMask)  # make a copy to edit that will be used later
             keepCellMaskOrig = np.copy(keepCellMask)  # make a copy to edit that can be edited without changing the original

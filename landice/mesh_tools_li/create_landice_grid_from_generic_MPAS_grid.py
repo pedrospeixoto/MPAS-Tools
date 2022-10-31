@@ -211,6 +211,26 @@ newvar = fileout.createVariable('effectivePressure', datatype, ('Time', 'nCells'
 newvar[:] = 1.0  # Give a default effective pressure of 1.0 so that, for the linear sliding law, beta = mu*effecpress = mu.
 print('Added variable: effectivePressure')
 
+newvar = fileout.createVariable('stiffnessFactor', datatype, ('Time', 'nCells'))
+newvar[:] = 1.0  # Give default value
+print('Added variable: stiffnessFactor')
+
+newvar = fileout.createVariable('eigencalvingParameter', datatype, ('Time', 'nCells'))
+newvar[:] = 3.14e16  # Give default value for eigencalvingParameter
+print('Added variable: eigencalvingParameter')
+
+newvar = fileout.createVariable('groundedVonMisesThresholdStress', datatype, ('Time', 'nCells'))
+newvar[:] = 1.0e6  # Give default value
+print('Added variable: groundedVonMisesThresholdStress')
+
+newvar = fileout.createVariable('floatingVonMisesThresholdStress', datatype, ('Time', 'nCells'))
+newvar[:] = 1.0e6  # Give default value
+print('Added variable: floatingVonMisesThresholdStress')
+
+newvar = fileout.createVariable('iceMask', datatype, ('Time', 'nCells'))
+newvar[:] = 0
+print('Added variable: iceMask')
+
 if options.dirichlet:
    newvar = fileout.createVariable('dirichletVelocityMask', datatypeInt, ('Time', 'nCells', 'nVertInterfaces'))
    newvar[:] = 0  # default: no Dirichlet b.c.
